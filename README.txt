@@ -4,3 +4,4 @@ CCL: Life: Unscripted © 2025 by TheBigg(estNerd2014) is licensed under Creative
 Credits:
 Wood Texture: FWStudio on Pexels
 Player Sprite: SirExter/TheBigg
+Icon: Freepik
