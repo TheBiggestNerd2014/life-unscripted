@@ -22,47 +22,59 @@ class Player {
         this.isMoving = false;
         this.isSprinting = false;
         
-        // Enhanced movement system with walking/sprinting
+        // Enhanced movement system with personality-based variations
         this.velocityX = 0;
         this.velocityY = 0;
-        this.walkSpeed = 1.5;        // Much slower walking speed
-        this.sprintSpeed = 5;        // Keep sprinting speed the same
-        this.currentMaxSpeed = this.walkSpeed;
-        this.acceleration = 0.3;     // Slightly reduced acceleration for more realistic feel
+        this.baseWalkSpeed = 1.5;
+        this.baseSprintSpeed = 5;
+        this.currentMaxSpeed = this.baseWalkSpeed;
+        this.acceleration = 0.3;
         this.friction = 0.85;
         
-        // Player stats and inventory
+        // Character-specific attributes
+        this.currentCharacterData = null;
+        
+        // Enhanced player stats
         this.energy = 100;
         this.maxEnergy = 100;
-        this.sprintEnergyDecayRate = 0.08;  // Energy drain only when sprinting
+        this.sprintEnergyDecayRate = 0.08;
         this.inventory = [];
         this.maxInventorySize = 10;
         
         // Interaction system
         this.interactionRange = 50;
         this.lastInteractionTime = 0;
-        this.interactionCooldown = 500; // ms
+        this.interactionCooldown = 500;
         
-        // Load the sprite image (now using sprite sheet system)
-        this.spriteSheet = null; // Will hold the current sprite sheet
-        this.spriteWidth = 16;   // Width of each sprite frame (will be scaled)
-        this.spriteHeight = 16;  // Height of each sprite frame (will be scaled)
-        this.spriteScale = 2;    // Scale factor to make 16x16 sprites appear as 32x32
-        this.currentFrame = 0;   // Current animation frame
+        // Enhanced sprite system
+        this.spriteSheet = null;
+        this.spriteWidth = 16;   // Back to 16x16 sprites  
+        this.spriteHeight = 16;  // Back to 16x16 sprites
+        this.spriteScale = 2;    // Scale to 32x32 for display
+        this.currentFrame = 0;
         
-        // Improved hitbox - smaller than visual sprite for better gameplay
-        this.hitboxOffsetX = 4;  // Offset from sprite edge
-        this.hitboxOffsetY = 8;  // Offset from sprite edge  
-        this.hitboxWidth = 24;   // Smaller hitbox width
-        this.hitboxHeight = 20;  // Smaller hitbox height
+        // Improved hitbox for better gameplay
+        this.hitboxOffsetX = 4;  // Restored original values
+        this.hitboxOffsetY = 8;  
+        this.hitboxWidth = 24;   
+        this.hitboxHeight = 20;
         this.lightRadius = 150;
         this.lightsOn = true;
         
-        // Animation properties
+        // Enhanced animation
         this.animationFrame = 0;
-        this.walkAnimationSpeed = 0.15;
-        this.sprintAnimationSpeed = 0.3;
+        this.baseWalkAnimationSpeed = 0.15;
+        this.baseSprintAnimationSpeed = 0.3;
         this.walkCycle = 0;
+        
+        // Time-based animation for Jake's frames
+        this.animationTimer = 0;
+        this.frameChangeInterval = 50; // 0.05 seconds in milliseconds
+        
+        // Character expression system
+        this.facialExpression = "neutral";
+        this.expressionTimer = 0;
+        this.expressions = ["neutral", "happy", "focused", "tired", "excited"];
     }
 
     getHitbox() {
@@ -97,11 +109,13 @@ class Player {
         if (this.isSprinting) {
             ctx.save();
             ctx.globalAlpha = 0.9;
-            ctx.filter = 'brightness(1.2) saturate(1.3)';
+            ctx.filter = 'hue-rotate(10deg)';
         }
-        
-        // Try to draw sprite, fallback to canvas drawing if it fails
-        if (this.spriteSheet && this.spriteSheet.complete && this.spriteSheet.width > 0) {
+
+        // Try to draw sprite sheet first, fallback to canvas drawing
+        if (this.frameImages && this.currentCharacterData.useIndividualFrames) {
+            this.drawIndividualFrames(ctx);
+        } else if (this.spriteSheet && this.spriteSheet.complete) {
             this.drawSpriteSheet(ctx);
         } else {
             this.drawCanvasCharacter(ctx);
@@ -113,29 +127,43 @@ class Player {
     }
 
     drawSpriteSheet(ctx) {
-        // Robust sprite sheet drawing with automatic boundary detection
+        // Custom sprite sheet drawing for user-created characters
         try {
             // Calculate sprite sheet layout
             const spritesPerRow = Math.floor(this.spriteSheet.width / this.spriteWidth);
             const spritesPerCol = Math.floor(this.spriteSheet.height / this.spriteHeight);
             
-            // Default to using the first sprite (top-left) for idle
             let frameX = 0;
             let frameY = 0;
             
-            // If moving, try to use walking animation
-            if (this.isMoving && spritesPerRow >= 3) {
-                // Use first 3 frames for walking animation
-                const frameIndex = Math.floor(this.walkCycle * 3) % 3;
-                frameX = frameIndex * this.spriteWidth;
-                
-                // Try to use direction-based rows if available
-                if (spritesPerCol >= 4) {
-                    frameY = this.getDirectionRow() * this.spriteHeight;
+            // Custom animation logic for characters with custom frames
+            if (this.customFrames) {
+                if (this.isMoving && this.customFrames.walk) {
+                    // Walking animation: use custom walk frames
+                    const walkCycleStep = Math.floor(this.walkCycle * 4) % this.customFrames.walk.length;
+                    const frame = this.customFrames.walk[walkCycleStep];
+                    frameX = frame.x * this.spriteWidth;
+                    frameY = frame.y * this.spriteHeight;
+                } else if (this.customFrames.idle) {
+                    // Idle animation: use custom idle frame
+                    frameX = this.customFrames.idle.x * this.spriteWidth;
+                    frameY = this.customFrames.idle.y * this.spriteHeight;
                 }
-            } else if (!this.isMoving && spritesPerRow >= 2) {
-                // Use second frame for idle if available
-                frameX = this.spriteWidth;
+            } else {
+                // Default animation logic for other characters
+                if (this.isMoving && spritesPerRow >= 3) {
+                    // Use first 3 frames for walking animation
+                    const frameIndex = Math.floor(this.walkCycle * 3) % 3;
+                    frameX = frameIndex * this.spriteWidth;
+                    
+                    // Try to use direction-based rows if available
+                    if (spritesPerCol >= 4) {
+                        frameY = this.getDirectionRow() * this.spriteHeight;
+                    }
+                } else if (!this.isMoving && spritesPerRow >= 2) {
+                    // Use second frame for idle if available
+                    frameX = this.spriteWidth;
+                }
             }
             
             // Safety bounds checking
@@ -144,7 +172,7 @@ class Player {
             frameX = Math.max(0, frameX);
             frameY = Math.max(0, frameY);
             
-            // Draw the full sprite frame (bounds detection disabled for local file compatibility)
+            // Draw the sprite frame
             ctx.drawImage(
                 this.spriteSheet,
                 frameX, frameY, this.spriteWidth, this.spriteHeight,
@@ -160,6 +188,11 @@ class Player {
     drawCanvasCharacter(ctx) {
         // Character definitions with unique visual styles
         const characters = {
+            "Jake": {
+                bodyColor: '#FFDBAC',
+                shirtColor: '#2196F3',
+                hairColor: '#8B4513'
+            },
             "Bob": {
                 bodyColor: '#4CAF50',
                 shirtColor: '#2E7D32',
@@ -230,25 +263,106 @@ class Player {
         }
     }
 
-    // Method to set character from sprite manager
+    // Enhanced character setting with personality integration
     setCharacter(characterData) {
-        // Store character name for fallback
+        this.currentCharacterData = characterData;
         this.currentCharacterName = characterData.name;
         
-        this.spriteSheet = new Image();
-        this.spriteSheet.src = characterData.spriteSheet;
-        this.spriteWidth = characterData.frameWidth;
-        this.spriteHeight = characterData.frameHeight;
-        this.spriteScale = characterData.scale;
-        
-        this.spriteSheet.onload = () => {
-            // Sprite sheet loaded
+        if (characterData.useIndividualFrames) {
+            // Load individual frame files for Jake
+            this.frameImages = {};
+            this.spriteSheet = null; // Don't use sprite sheet
+            
+            // Load idle frame
+            this.frameImages.idle = new Image();
+            this.frameImages.idle.src = characterData.frameFiles.idle;
+            this.frameImages.idle.onload = () => {
+                console.log(`Loaded ${characterData.displayName} idle frame`);
+            };
+            
+            // Load walk frame
+            this.frameImages.walk = new Image();
+            this.frameImages.walk.src = characterData.frameFiles.walk;
+            this.frameImages.walk.onload = () => {
+                console.log(`Loaded ${characterData.displayName} walk frame`);
+            };
+            
+            this.spriteWidth = characterData.frameWidth;
+            this.spriteHeight = characterData.frameHeight;
+            this.spriteScale = characterData.scale;
+        } else {
+            // Original sprite sheet loading
+            this.spriteSheet = new Image();
+            this.spriteSheet.src = characterData.spriteSheet;
+            this.spriteWidth = characterData.frameWidth;
+            this.spriteHeight = characterData.frameHeight;
+            this.spriteScale = characterData.scale;
+            
+            // Set custom frame positions if provided
+            if (characterData.customFrames) {
+                this.customFrames = characterData.customFrames;
+            }
+            
+            this.spriteSheet.onload = () => {
+                console.log(`Loaded ${characterData.displayName} custom sprite`);
+            };
+            
+            this.spriteSheet.onerror = () => {
+                console.log(`Sprite not found for ${characterData.name}, using fallback`);
+                this.spriteSheet = null;
+            };
+        }
+    }
+
+    // Method to set custom frame positions for characters
+    setCustomFrames(idleFrame, walkFrames) {
+        this.customFrames = {
+            idle: idleFrame,
+            walk: walkFrames
         };
+    }
+
+    // Apply character personality to movement and behavior
+    applyPersonalityModifiers(characterData) {
+        // Adjust movement based on character traits
+        switch(characterData.walkStyle) {
+            case "measured":
+                this.personalityModifiers.walkSpeed = 0.9;
+                this.personalityModifiers.sprintSpeed = 1.1;
+                break;
+            case "confident":
+                this.personalityModifiers.walkSpeed = 1.1;
+                this.personalityModifiers.sprintSpeed = 1.2;
+                break;
+            case "graceful":
+                this.personalityModifiers.walkSpeed = 1.0;
+                this.personalityModifiers.sprintSpeed = 0.9;
+                this.baseWalkAnimationSpeed = 0.12; // Smoother animation
+                break;
+            case "alert":
+                this.personalityModifiers.walkSpeed = 1.05;
+                this.personalityModifiers.sprintSpeed = 1.3;
+                break;
+        }
         
-        this.spriteSheet.onerror = () => {
-            // Failed to load sprite sheet, using fallback
-            this.spriteSheet = null;
-        };
+        // Apply energy recovery rate from character data
+        this.personalityModifiers.energyRecovery = characterData.energyRecoveryRate || 1.0;
+        
+        // Set initial mood based on personality
+        switch(characterData.personality) {
+            case "Intellectual":
+                this.currentMood = "Focused";
+                break;
+            case "Practical":
+                this.currentMood = "Relaxed";
+                break;
+            case "Creative":
+                this.currentMood = "Inspired";
+                break;
+            case "Resilient":
+                this.currentMood = "Energetic";
+                break;
+        }
     }
 
     // Method to load sprite sheet from assets folder (legacy support)
@@ -371,11 +485,12 @@ class Player {
         this.lightsOn = !this.lightsOn;
     }
 
+    // Enhanced update method with personality-aware behavior
     update(deltaTime, isSprinting = false) {
         // Can only sprint if energy is above minimum threshold
         const minSprintEnergy = 10;
         this.isSprinting = isSprinting && this.energy > minSprintEnergy && this.isMoving;
-        this.currentMaxSpeed = this.isSprinting ? this.sprintSpeed : this.walkSpeed;
+        this.currentMaxSpeed = this.isSprinting ? this.baseSprintSpeed : this.baseWalkSpeed;
         
         // Update energy - only drain when sprinting
         if (this.isMoving && this.isSprinting) {
@@ -384,18 +499,17 @@ class Player {
             // If energy drops to zero while sprinting, force stop
             if (this.energy <= 0) {
                 this.isSprinting = false;
-                this.currentMaxSpeed = this.walkSpeed;
+                this.currentMaxSpeed = this.baseWalkSpeed;
             }
         } else if (this.energy < this.maxEnergy) {
             // Regenerate energy when not sprinting (faster when not moving)
             const regenRate = this.isMoving ? 0.03 : 0.06;
             this.energy = Math.min(this.maxEnergy, this.energy + regenRate * deltaTime);
         }
-        
-        // Update animation speed based on movement type
-        const animationSpeed = this.isSprinting ? this.sprintAnimationSpeed : this.walkAnimationSpeed;
-        
+
         // Update animation
+        const animationSpeed = this.isSprinting ? this.baseSprintAnimationSpeed : this.baseWalkAnimationSpeed;
+        
         if (this.isMoving) {
             this.walkCycle += animationSpeed * (deltaTime / 16.67); // Normalize for 60fps
             
@@ -403,16 +517,167 @@ class Player {
             if (this.walkCycle >= 1) {
                 this.walkCycle = 0;
             }
+            
+            // Update animation timer for Jake's frames
+            this.animationTimer += deltaTime;
         } else {
             // Reset animation when not moving
             this.walkCycle = 0;
+            this.animationTimer = 0;
         }
-        
+
         // Apply friction to velocities
         this.velocityX *= this.friction;
         this.velocityY *= this.friction;
+    }
+
+    // Basic collision detection with walls
+    handleCollisions(walls) {
+        if (!walls) return;
         
-        // Don't update position here - let the move() method handle it
+        walls.forEach(wall => {
+            if (this.checkCollision(wall)) {
+                // Simple collision response - separate from wall
+                this.separateFromWall(wall);
+            }
+        });
+    }
+
+    // Check if player collides with a wall
+    checkCollision(wall) {
+        return this.x + this.hitboxOffsetX < wall.x + wall.width &&
+               this.x + this.hitboxOffsetX + this.hitboxWidth > wall.x &&
+               this.y + this.hitboxOffsetY < wall.y + wall.height &&
+               this.y + this.hitboxOffsetY + this.hitboxHeight > wall.y;
+    }
+
+    // Separate player from wall
+    separateFromWall(wall) {
+        const playerCenterX = this.x + this.hitboxOffsetX + this.hitboxWidth / 2;
+        const playerCenterY = this.y + this.hitboxOffsetY + this.hitboxHeight / 2;
+        const wallCenterX = wall.x + wall.width / 2;
+        const wallCenterY = wall.y + wall.height / 2;
+
+        const overlapX = (this.hitboxWidth + wall.width) / 2 - Math.abs(playerCenterX - wallCenterX);
+        const overlapY = (this.hitboxHeight + wall.height) / 2 - Math.abs(playerCenterY - wallCenterY);
+
+        if (overlapX < overlapY) {
+            // Separate horizontally
+            if (playerCenterX < wallCenterX) {
+                this.x = wall.x - this.hitboxOffsetX - this.hitboxWidth;
+            } else {
+                this.x = wall.x + wall.width - this.hitboxOffsetX;
+            }
+            this.velocityX = 0;
+        } else {
+            // Separate vertically
+            if (playerCenterY < wallCenterY) {
+                this.y = wall.y - this.hitboxOffsetY - this.hitboxHeight;
+            } else {
+                this.y = wall.y + wall.height - this.hitboxOffsetY;
+            }
+            this.velocityY = 0;
+        }
+    }
+
+    // Mood system for dynamic character behavior
+    updateMood(deltaTime) {
+        this.moodTimer += deltaTime;
+        if (this.moodTimer >= this.moodChangeInterval) {
+            // Randomly change mood based on current activity and personality
+            const moodOptions = this.getMoodOptionsForPersonality();
+            this.currentMood = moodOptions[Math.floor(Math.random() * moodOptions.length)];
+            this.moodTimer = 0;
+        }
+    }
+
+    getMoodOptionsForPersonality() {
+        if (!this.currentCharacterData) return ["Focused"];
+        
+        switch(this.currentCharacterData.personality) {
+            case "Intellectual":
+                return ["Focused", "Inspired", "Tired"];
+            case "Practical":
+                return ["Focused", "Relaxed", "Energetic"];
+            case "Creative":
+                return ["Inspired", "Energetic", "Relaxed"];
+            case "Resilient":
+                return ["Energetic", "Focused", "Alert"];
+            default:
+                return ["Focused"];
+        }
+    }
+
+    // Enhanced energy system with personality and mood integration
+    updateEnergyWithPersonality(deltaTime) {
+        let energyChange = 0;
+        
+        if (this.isSprinting && this.energy > 0) {
+            // Apply sprint energy drain with mood effects
+            const moodEffect = this.getMoodEffect();
+            energyChange = -this.sprintEnergyDecayRate * moodEffect.energyDrain;
+        } else if (!this.isMoving) {
+            // Recovery when idle, affected by personality and mood
+            const recoveryRate = this.baseEnergyRecoveryRate * this.personalityModifiers.energyRecovery;
+            energyChange = recoveryRate;
+        }
+        
+        this.energy = Math.max(0, Math.min(this.maxEnergy, this.energy + energyChange));
+        
+        // Update current max speed based on energy and personality
+        this.updateSpeedWithPersonality();
+    }
+
+    updateSpeedWithPersonality() {
+        if (this.energy <= 0) {
+            this.isSprinting = false;
+        }
+        
+        const walkSpeed = this.baseWalkSpeed * this.personalityModifiers.walkSpeed;
+        const sprintSpeed = this.baseSprintSpeed * this.personalityModifiers.sprintSpeed;
+        
+        this.currentMaxSpeed = this.isSprinting && this.energy > 0 ? sprintSpeed : walkSpeed;
+    }
+
+    getMoodEffect() {
+        // This would be set by the SpriteManager's moodEffects
+        return {
+            energyDrain: 1.0,
+            interactionSpeed: 1.0
+        };
+    }
+
+    // Enhanced animation with personality-based timing
+    updateAnimationWithPersonality(deltaTime) {
+        if (this.isMoving) {
+            const baseSpeed = this.isSprinting ? this.baseSprintAnimationSpeed : this.baseWalkAnimationSpeed;
+            const personalityMultiplier = this.getAnimationSpeedMultiplier();
+            this.walkCycle += baseSpeed * personalityMultiplier * deltaTime;
+        }
+    }
+
+    getAnimationSpeedMultiplier() {
+        if (!this.currentCharacterData) return 1.0;
+        
+        switch(this.currentCharacterData.walkStyle) {
+            case "graceful":
+                return 0.8; // Smoother, more deliberate
+            case "alert":
+                return 1.2; // Quick, reactive
+            case "confident":
+                return 1.1; // Steady, assured
+            default:
+                return 1.0;
+        }
+    }
+
+    // Simple expression system
+    updateExpression(deltaTime) {
+        this.expressionTimer += deltaTime;
+        if (this.expressionTimer >= 5000) { // Change expression every 5 seconds
+            this.facialExpression = this.expressions[Math.floor(Math.random() * this.expressions.length)];
+            this.expressionTimer = 0;
+        }
     }
 
     addToInventory(item) {
@@ -442,6 +707,100 @@ class Player {
             return true;
         }
         return false;
+    }
+
+    // Enhanced interaction handling with personality effects
+    handleInteractions(interactiveObjects) {
+        if (!interactiveObjects) return;
+        
+        const moodEffect = this.getMoodEffect();
+        const adjustedCooldown = this.interactionCooldown / moodEffect.interactionSpeed;
+        
+        const currentTime = Date.now();
+        if (currentTime - this.lastInteractionTime < adjustedCooldown) {
+            return;
+        }
+        
+        interactiveObjects.forEach(obj => {
+            const distance = Math.sqrt(
+                (this.x + this.width/2 - (obj.x + obj.width/2)) ** 2 +
+                (this.y + this.height/2 - (obj.y + obj.height/2)) ** 2
+            );
+            
+            if (distance <= this.interactionRange) {
+                obj.setNearPlayer(true);
+            } else {
+                obj.setNearPlayer(false);
+            }
+        });
+    }
+
+    drawIndividualFrames(ctx) {
+        // Draw individual frame images for Jake
+        let currentImage = this.frameImages.walk; // Always use walk sprite sheet for animation
+        
+        // Draw the image (adjust dimensions if needed)
+        if (currentImage && currentImage.complete) {
+            try {
+                let frameIndex = 0;
+                
+                if (this.isMoving) {
+                    // Direction-based frame selection with alternating animation
+                    let baseFrameIndex = 0;
+                    
+                    // Select base frame based on direction
+                    switch(this.direction) {
+                        case 'down':
+                            baseFrameIndex = 0; // Frames 0-1 for down
+                            break;
+                        case 'up':
+                            baseFrameIndex = 2; // Frames 2-3 for up
+                            break;
+                        case 'left':
+                        case 'right':
+                            baseFrameIndex = 0; // Use down frames for left/right (fallback)
+                            break;
+                        default:
+                            baseFrameIndex = 0;
+                    }
+                    
+                    // Alternate between the 2 frames for this direction every 0.05 seconds
+                    const alternateFrame = Math.floor(this.animationTimer / this.frameChangeInterval) % 2;
+                    frameIndex = baseFrameIndex + alternateFrame;
+                    
+                } else {
+                    // Idle: use idle sprite sheet, frame 0
+                    currentImage = this.frameImages.idle;
+                    frameIndex = 0;
+                }
+                
+                // Calculate frame position (4 frames horizontally)
+                const frameX = frameIndex * this.spriteWidth; // 0, 64, 128, or 192
+                const frameY = 0; // Only 1 row
+                
+                // Debug info
+                if (this.debugOnce !== true) {
+                    console.log(`Image dimensions: ${currentImage.width}x${currentImage.height}`);
+                    console.log(`Frame size: ${this.spriteWidth}x${this.spriteHeight}`);
+                    console.log(`Direction: ${this.direction}, Frame index: ${frameIndex}, Position: ${frameX}x${frameY}`);
+                    this.debugOnce = true;
+                }
+                
+                // Extract specific frame from sprite sheet
+                ctx.drawImage(
+                    currentImage,
+                    frameX, frameY, this.spriteWidth, this.spriteHeight, // Source: specific 64x64 frame
+                    this.x, this.y, this.width, this.height              // Destination: scaled to player size
+                );
+                
+            } catch (error) {
+                console.log("Error drawing image, using canvas fallback:", error);
+                this.drawCanvasCharacter(ctx);
+            }
+        } else {
+            // Fallback to canvas drawing if image isn't loaded yet
+            this.drawCanvasCharacter(ctx);
+        }
     }
 }
 
@@ -1641,36 +2000,16 @@ class SpriteManager {
     constructor() {
         this.availableCharacters = [
             {
-                name: "Maya",
-                displayName: "Maya (Scientist)",
-                spriteSheet: "Maya_16x16.png",
-                frameWidth: 16,
-                frameHeight: 16,
-                scale: 2
-            },
-            {
                 name: "Jake",
-                displayName: "Jake (Mechanic)",
-                spriteSheet: "Jake_16x16.png",
-                frameWidth: 16,
-                frameHeight: 16,
-                scale: 2
-            },
-            {
-                name: "Luna",
-                displayName: "Luna (Artist)",
-                spriteSheet: "Luna_16x16.png",
-                frameWidth: 16,
-                frameHeight: 16,
-                scale: 2
-            },
-            {
-                name: "Derek",
-                displayName: "Derek (Survivalist)",
-                spriteSheet: "Derek_16x16.png",
-                frameWidth: 16,
-                frameHeight: 16,
-                scale: 2
+                displayName: "Jake",
+                useIndividualFrames: true,
+                frameFiles: {
+                    idle: "JakeIdle.png",
+                    walk: "JakeWalk.png"
+                },
+                frameWidth: 64,  // 256 ÷ 4 frames = 64 pixels per frame
+                frameHeight: 64, // 64 ÷ 1 frame = 64 pixels per frame
+                scale: 0.5       // Scale down from 64x64 to 32x32 for display
             }
         ];
         
